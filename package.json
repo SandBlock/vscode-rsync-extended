@@ -2,7 +2,7 @@
   "name": "sync-rsync",
   "displayName": "Sync-Rsync",
   "description": "Sync with remote using rsync",
-  "version": "0.35",
+  "version": "0.0.1",
   "publisher": "vscode-ext",
   "repository": {
     "type": "git",
@@ -17,7 +17,7 @@
   "activationEvents": [
     "*"
   ],
-  "main": "./out/src/extension",
+  "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
@@ -55,6 +55,10 @@
       {
         "command": "sync-rsync.killSync",
         "title": "Sync-Rsync: Kills the current sync"
+      },
+      {
+        "command": "sync-rsync.showSiteMenu",
+        "title": "Sync-Rsync: Select or Disconnect Site"
       }
     ],
     "menus": {
@@ -361,6 +365,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "@vscode/vsce": "^3.3.0",
     "chokidar": "^4.0.3",
     "lodash": "^4.17.21",
     "rsync": "^0.6.1"

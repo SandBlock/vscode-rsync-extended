@@ -9,6 +9,7 @@ import {
     Disposable,
     ExtensionContext,
     OutputChannel,
+    QuickPickItem,
     StatusBarAlignment,
     StatusBarItem,
     window as vscWindow,
@@ -32,18 +33,20 @@ class RsyncExtension {
     private currentSync?: child.ChildProcess;
     private syncKilled: boolean = true;
     private disposables: Disposable[] = [];
+    private currentSite: Site | null = null;
 
     constructor() {
         this.outputChannel = vscWindow.createOutputChannel('Sync-Rsync');
         this.statusBar = vscWindow.createStatusBarItem(StatusBarAlignment.Right, 1);
         this.statusBar.text = 'Rsync: $(info)';
-        this.statusBar.command = 'sync-rsync.showOutput';
+        this.statusBar.command = 'sync-rsync.showSiteMenu';
         this.statusBar.show();
         this.outputChannel.appendLine('Sync-Rsync started');
     }
 
     private createStatusText(text: string): string {
-        return `Rsync: ${text}`;
+        const siteName = this.currentSite?.name ?? this.currentSite?.remotePath ?? 'No Site';
+        return `Rsync: ${siteName} - ${text}`;
     }
 
     private getConfig(): Config {
@@ -218,6 +221,11 @@ class RsyncExtension {
     }
 
     private async sync(config: Config, { down, dry }: SyncOptions): Promise<void> {
+        if (!this.currentSite) {
+            vscWindow.showErrorMessage('No site selected. Please select a site first.');
+            return;
+        }
+
         this.statusBar.color = 'mediumseagreen';
         this.statusBar.text = this.createStatusText('$(sync)');
         this.statusBar.command = 'sync-rsync.killSync';
@@ -225,12 +233,10 @@ class RsyncExtension {
         let success = true;
         this.syncKilled = false;
 
-        for (const site of config.sites) {
-            success = success && await this.syncSite(site, config, { down, dry });
-        }
+        success = await this.syncSite(this.currentSite, config, { down, dry });
 
         this.syncKilled = true;
-        this.statusBar.command = 'sync-rsync.showOutput';
+        this.statusBar.command = 'sync-rsync.showSiteMenu';
 
         if (success) {
             if (config.autoHideOutput) {
@@ -251,6 +257,11 @@ class RsyncExtension {
     }
 
     private async syncFile(config: Config, file: string, down: boolean): Promise<void> {
+        if (!this.currentSite) {
+            vscWindow.showErrorMessage('No site selected. Please select a site first.');
+            return;
+        }
+
         this.statusBar.color = 'mediumseagreen';
         this.statusBar.text = this.createStatusText('$(sync)');
         this.statusBar.command = 'sync-rsync.killSync';
@@ -258,38 +269,36 @@ class RsyncExtension {
         let success = true;
         this.syncKilled = false;
 
-        for (const site of config.sites) {
-            const paths = down ? [site.remotePath + file, site.localPath + file] : [site.localPath + file, site.remotePath + file];
-            const rsync = new Rsync()
-                .flags(site.flags)
-                .progress(config.showProgress);
+        const paths = down ? [this.currentSite.remotePath + file, this.currentSite.localPath + file] : [this.currentSite.localPath + file, this.currentSite.remotePath + file];
+        const rsync = new Rsync()
+            .flags(this.currentSite.flags)
+            .progress(config.showProgress);
 
-            if (site.include.length > 0) {
-                rsync.include(site.include);
-            }
-
-            if (site.exclude.length > 0) {
-                rsync.exclude(site.exclude);
-            }
-
-            if (site.shell) {
-                rsync.shell(site.shell);
-            }
-
-            if (site.deleteFiles) {
-                rsync.delete();
-            }
-
-            if (site.chmod) {
-                rsync.chmod(site.chmod);
-            }
-
-            const result = await this.runSync(rsync, paths, site, config);
-            success = success && result.success;
+        if (this.currentSite.include.length > 0) {
+            rsync.include(this.currentSite.include);
         }
 
+        if (this.currentSite.exclude.length > 0) {
+            rsync.exclude(this.currentSite.exclude);
+        }
+
+        if (this.currentSite.shell) {
+            rsync.shell(this.currentSite.shell);
+        }
+
+        if (this.currentSite.deleteFiles) {
+            rsync.delete();
+        }
+
+        if (this.currentSite.chmod) {
+            rsync.chmod(this.currentSite.chmod);
+        }
+
+        const result = await this.runSync(rsync, paths, this.currentSite, config);
+        success = result.success;
+
         this.syncKilled = true;
-        this.statusBar.command = 'sync-rsync.showOutput';
+        this.statusBar.command = 'sync-rsync.showSiteMenu';
 
         if (success) {
             if (config.autoHideOutput) {
@@ -355,11 +364,82 @@ class RsyncExtension {
         });
     }
 
+    private async showSiteMenu(): Promise<void> {
+        const config = this.getConfig();
+        const sites = config.sites;
+        
+        if (sites.length === 0) {
+            vscWindow.showErrorMessage('No sites configured');
+            return;
+        }
+
+        interface SiteQuickPickItem extends QuickPickItem {
+            site: Site | null;
+        }
+
+        const items: SiteQuickPickItem[] = sites.map(site => ({
+            label: site.name ?? site.remotePath ?? 'Unknown Site',
+            description: site.remotePath ?? '',
+            site
+        }));
+
+        // Add disconnect option if a site is selected
+        if (this.currentSite) {
+            items.unshift({
+                label: '$(close) Disconnect',
+                description: 'Disconnect from current site',
+                site: null
+            });
+        }
+
+        const selected = await vscWindow.showQuickPick<SiteQuickPickItem>(items, {
+            placeHolder: 'Select a site or disconnect'
+        });
+
+        if (selected) {
+            if (selected.site === null) {
+                // Disconnect was selected
+                this.currentSite = null;
+                this.statusBar.text = this.createStatusText('$(info)');
+                this.outputChannel.appendLine('Disconnected from site');
+            } else {
+                // A site was selected
+                this.currentSite = selected.site;
+                this.statusBar.text = this.createStatusText('$(info)');
+                this.outputChannel.appendLine(`Connected to site: ${selected.label}`);
+            }
+        }
+    }
+
     public activate(context: ExtensionContext): void {
-        const syncUp = () => this.sync(this.getConfig(), { down: false, dry: false });
-        const syncDown = () => this.sync(this.getConfig(), { down: true, dry: false });
-        const compareUp = () => this.sync(this.getConfig(), { down: false, dry: true });
-        const compareDown = () => this.sync(this.getConfig(), { down: true, dry: true });
+        const syncUp = () => {
+            if (!this.currentSite) {
+                vscWindow.showErrorMessage('No site selected. Please select a site first.');
+                return;
+            }
+            this.sync(this.getConfig(), { down: false, dry: false });
+        };
+        const syncDown = () => {
+            if (!this.currentSite) {
+                vscWindow.showErrorMessage('No site selected. Please select a site first.');
+                return;
+            }
+            this.sync(this.getConfig(), { down: true, dry: false });
+        };
+        const compareUp = () => {
+            if (!this.currentSite) {
+                vscWindow.showErrorMessage('No site selected. Please select a site first.');
+                return;
+            }
+            this.sync(this.getConfig(), { down: false, dry: true });
+        };
+        const compareDown = () => {
+            if (!this.currentSite) {
+                vscWindow.showErrorMessage('No site selected. Please select a site first.');
+                return;
+            }
+            this.sync(this.getConfig(), { down: true, dry: true });
+        };
         const syncUpSingle = () => this.syncSingle(this.getConfig(), false);
         const syncDownSingle = () => this.syncSingle(this.getConfig(), true);
         const killSync = () => {
@@ -369,6 +449,7 @@ class RsyncExtension {
             }
         };
         const showOutput = () => this.outputChannel.show();
+        const showSiteMenu = () => this.showSiteMenu();
 
         const config = this.getConfig();
         if (config.onFileSave) {
@@ -401,7 +482,8 @@ class RsyncExtension {
             commands.registerCommand('sync-rsync.killSync', killSync),
             commands.registerCommand('sync-rsync.showOutput', showOutput),
             commands.registerCommand('sync-rsync.syncUpContext', syncUp),
-            commands.registerCommand('sync-rsync.syncDownContext', syncDown)
+            commands.registerCommand('sync-rsync.syncDownContext', syncDown),
+            commands.registerCommand('sync-rsync.showSiteMenu', showSiteMenu)
         );
 
         context.subscriptions.push(...this.disposables);
