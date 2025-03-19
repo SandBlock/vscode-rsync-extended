@@ -453,7 +453,11 @@ class RsyncExtension {
 
         const config = this.getConfig();
         if (config.onFileSave) {
-            workspace.onDidSaveTextDocument(() => syncUp());
+            workspace.onDidSaveTextDocument(() => {
+                if (this.currentSite) {
+                    syncUp();
+                }
+            });
         }
 
         if (config.onFileSaveIndividual) {
