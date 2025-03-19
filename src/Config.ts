@@ -26,6 +26,11 @@ export interface SiteOptions {
     postSyncDown?: string[];
     options: string[][];
     args: string[];
+    template?: string;
+}
+
+export interface SiteTemplate extends SiteOptions {
+    isTemplate: true;
 }
 
 export class Site implements SiteOptions {
@@ -49,7 +54,8 @@ export class Site implements SiteOptions {
         public preSyncDown?: string[],
         public postSyncDown?: string[],
         public options: string[][] = [],
-        public args: string[] = []
+        public args: string[] = [],
+        public template?: string
     ) {}
 }
 
@@ -63,6 +69,7 @@ export interface ConfigOptions {
     onFileLoadIndividual: boolean;
     showProgress: boolean;
     sites: Site[];
+    templates: SiteTemplate[];
     cygpath?: string;
     watchGlobs: string[];
     useWSL: boolean;
@@ -78,10 +85,12 @@ export class Config implements ConfigOptions {
     readonly onFileLoadIndividual: boolean;
     readonly showProgress: boolean;
     readonly sites: Site[];
+    readonly templates: SiteTemplate[];
     readonly cygpath?: string;
     readonly watchGlobs: string[];
     readonly useWSL: boolean;
     readonly siteMap: Map<string, Site>;
+    readonly templateMap: Map<string, SiteTemplate>;
     
     private readonly _workspaceFolder: string;
     private readonly _workspaceFolderBasename: string;
@@ -125,10 +134,30 @@ export class Config implements ConfigOptions {
             config.get('args', [])
         );
 
+        const config_templates = config.get<SiteTemplate[]>('templates', []);
+        this.templates = config_templates.map(template => ({
+            ...site_default,
+            ...template,
+            isTemplate: true
+        }));
+        this.templateMap = new Map(
+            this.templates.map(template => [template.name ?? '', template])
+        );
+
         const config_sites = config.get<SiteOptions[]>('sites', []);
         this.sites = config_sites.length === 0 
             ? [site_default]
-            : config_sites.map(site => ({ ...site_default, ...site }));
+            : config_sites.map(site => {
+                if (site.template && this.templateMap.has(site.template)) {
+                    const template = this.templateMap.get(site.template)!;
+                    return {
+                        ...template,
+                        ...site,
+                        isTemplate: undefined
+                    };
+                }
+                return { ...site_default, ...site };
+            });
 
         this.siteMap = new Map(
             this.sites.map(site => [site.name ?? site.remotePath ?? '', site])

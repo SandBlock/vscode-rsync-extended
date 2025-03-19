@@ -219,17 +219,16 @@
           "default": false,
           "description": "Use WSL"
         },
-        "sync-rsync.sites": {
+        "sync-rsync.templates": {
           "type": "array",
-          "description": "Sites",
+          "description": "Site templates that can be reused by multiple sites",
           "default": [],
           "items": {
             "type": "object",
             "properties": {
               "name": {
                 "type": "string",
-                "default": null,
-                "description": "Site Name"
+                "description": "Template Name (required)"
               },
               "upOnly": {
                 "type": "boolean",
@@ -246,10 +245,135 @@
                 "default": null,
                 "description": "Local location defaults to workspace (must end in path separator)"
               },
+              "deleteFiles": {
+                "type": "boolean",
+                "default": false,
+                "description": "Delete false during sync"
+              },
+              "flags": {
+                "type": "string",
+                "default": "rlptzv",
+                "description": "Rsync flags"
+              },
+              "exclude": {
+                "type": "array",
+                "default": [
+                  ".git",
+                  ".vscode"
+                ],
+                "description": "Rsync exclude patterns",
+                "items": {
+                  "type": "string",
+                  "title": "rsync exclude pattern"
+                }
+              },
+              "include": {
+                "type": "array",
+                "default": [],
+                "description": "Rsync include patterns",
+                "items": {
+                  "type": "string",
+                  "title": "rsync include pattern"
+                }
+              },
+              "chmod": {
+                "type": "string",
+                "description": "Rsync's --chmod option"
+              },
+              "shell": {
+                "type": "string",
+                "description": "Rsync's -e option e.g. ssh -p 1234"
+              },
+              "afterSync": {
+                "type": "array",
+                "description": "a command to run after successful sync up",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "preSyncUp": {
+                "type": "array",
+                "description": "a command to before syncing up",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "postSyncUp": {
+                "type": "array",
+                "description": "a command to after syncing up",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "preSyncDown": {
+                "type": "array",
+                "description": "a command to before syncing down",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "postSyncDown": {
+                "type": "array",
+                "description": "a command to after syncing down",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "options": {
+                "type": "array",
+                "description": "Extra rsync options (not checked)",
+                "default": [],
+                "items": {
+                  "type": "array"
+                }
+              },
+              "args": {
+                "type": "array",
+                "description": "rsync arguments to add",
+                "default": [],
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["name"]
+          }
+        },
+        "sync-rsync.sites": {
+          "type": "array",
+          "description": "Sites",
+          "default": [],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "default": null,
+                "description": "Site Name"
+              },
+              "template": {
+                "type": "string",
+                "description": "Name of the template to inherit from"
+              },
               "remotePath": {
                 "type": "string",
                 "default": null,
                 "description": "Remote location (user@host:path) (must end in path separator)"
+              },
+              "upOnly": {
+                "type": "boolean",
+                "default": false,
+                "description": "Only Sync Local to Remote"
+              },
+              "downOnly": {
+                "type": "boolean",
+                "default": false,
+                "description": "Only Sync Remote to Local"
+              },
+              "localPath": {
+                "type": "string",
+                "default": null,
+                "description": "Local location defaults to workspace (must end in path separator)"
               },
               "deleteFiles": {
                 "type": "boolean",
