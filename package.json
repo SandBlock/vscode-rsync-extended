@@ -1,12 +1,12 @@
 {
-  "name": "sync-rsync",
-  "displayName": "Sync-Rsync",
-  "description": "Sync with remote using rsync",
+  "name": "sync-rsync-extended",
+  "displayName": "Sync-Rsync Extended",
+  "description": "Enhanced sync with remote using rsync - Extended version with additional features",
   "version": "0.0.1",
-  "publisher": "vscode-ext",
+  "publisher": "SandBlock",
   "repository": {
     "type": "git",
-    "url": "https://github.com/thisboyiscrazy/vscode-rsync"
+    "url": "https://github.com/sander/vscode-rsync-extended"
   },
   "engines": {
     "vscode": "^1.85.0"

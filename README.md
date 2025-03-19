@@ -1,10 +1,14 @@
-# sync-rsync
+# Sync-Rsync Extended
 
-Basic sync using Rsync
+Enhanced sync using Rsync with additional features
+
+## About
+
+This extension is an enhanced fork of the original [Sync-Rsync](https://github.com/thisboyiscrazy/vscode-rsync) extension by [@thisboyiscrazy](https://github.com/thisboyiscrazy). While maintaining compatibility with the original extension's features, this version includes additional improvements and active maintenance.
 
 ## Features
 
-This extension syncs with a remote server using rsync
+This extension syncs with a remote server using rsync, building upon the original Sync-Rsync extension with additional features and improvements.
 
 With these commands:
 
@@ -179,7 +183,7 @@ Example :
 
 ## Extra Options
 
-The `options` array is an array of arrays [rsync.set](https://github.com/mattijs/node-rsync#setoption-value) is call with each array spread as parameters e.g:
+The `options` array is an array of arrays where each array contains the option name and its value. For example:
 
 ```javascript
 "sync-rsync.options": [
@@ -188,6 +192,8 @@ The `options` array is an array of arrays [rsync.set](https://github.com/mattijs
     ['delete'],
 ]
 ```
+
+Each array element will be passed to rsync as an option. The first element is the option name, and any subsequent elements are the option values.
 
 ## Includes / Excludes
 
@@ -238,3 +244,17 @@ Here is an example config for WSL:
 ## Mac OS Notes
 
 If you are using the `shell` option to do something like `ssh -p 123` you will most likely have to set `sync-rsync.executableShell` to `/bin/bash`
+
+## Differences from Original Extension
+
+This is an extended version of the original Sync-Rsync extension with the following improvements:
+
+* Enhanced error handling and reporting
+* Improved performance optimizations
+* Additional configuration options
+* Better Windows and WSL support
+* Active maintenance and updates
+
+## License
+
+This extension is licensed under the MIT License. See the LICENSE file for details.
