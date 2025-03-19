@@ -1,38 +1,59 @@
+import * as child from 'child_process';
+import * as path from 'path';
 import {
     WorkspaceConfiguration,
     workspace
 } from 'vscode';
-import * as path from 'path';
-import * as child from 'child_process';
 
-export class Site { 
-    
-    constructor(
-        public name: string,
-        public upOnly: boolean,
-        public downOnly: boolean,
-        public localPath: string,
-        public remotePath: string,
-        public deleteFiles: boolean,
-        public flags: string,
-        public exclude: Array<string>,
-        public include: Array<string>,
-        public chmod: string,
-        public shell: string,
-        public executableShell: string,
-        public executable: string,
-        public afterSync: string[],
-        public preSyncUp: string[],
-        public postSyncUp: string[],
-        public preSyncDown: string[],
-        public postSyncDown: string[],
-        public options: Array<Array<string>>,
-        public args: Array<string>
-    ) {}
-
+export interface SiteOptions {
+    name: string | null;
+    upOnly: boolean;
+    downOnly: boolean;
+    localPath: string | null;
+    remotePath: string | null;
+    deleteFiles: boolean;
+    flags: string;
+    exclude: string[];
+    include: string[];
+    chmod?: string;
+    shell?: string;
+    executableShell?: string;
+    executable: string;
+    afterSync?: string[];
+    preSyncUp?: string[];
+    postSyncUp?: string[];
+    preSyncDown?: string[];
+    postSyncDown?: string[];
+    options: string[][];
+    args: string[];
 }
 
-export class Config {
+export class Site implements SiteOptions {
+    constructor(
+        public name: string | null,
+        public upOnly: boolean,
+        public downOnly: boolean,
+        public localPath: string | null,
+        public remotePath: string | null,
+        public deleteFiles: boolean,
+        public flags: string,
+        public exclude: string[],
+        public include: string[],
+        public chmod?: string,
+        public shell?: string,
+        public executableShell?: string,
+        public executable: string = 'rsync',
+        public afterSync?: string[],
+        public preSyncUp?: string[],
+        public postSyncUp?: string[],
+        public preSyncDown?: string[],
+        public postSyncDown?: string[],
+        public options: string[][] = [],
+        public args: string[] = []
+    ) {}
+}
+
+export interface ConfigOptions {
     notification: boolean;
     autoShowOutput: boolean;
     autoShowOutputOnError: boolean;
@@ -41,13 +62,29 @@ export class Config {
     onFileSaveIndividual: boolean;
     onFileLoadIndividual: boolean;
     showProgress: boolean;
-    sites: Array<Site>;
-    cygpath: string;
-    watchGlobs: Array<string>;
+    sites: Site[];
+    cygpath?: string;
+    watchGlobs: string[];
     useWSL: boolean;
-    siteMap: Map<string, Site>;
-    _workspaceFolder: string = workspace.rootPath ? workspace.rootPath : "";
-    _workspaceFolderBasename: string = workspace.rootPath ? path.basename(workspace.rootPath) : "";
+}
+
+export class Config implements ConfigOptions {
+    readonly notification: boolean;
+    readonly autoShowOutput: boolean;
+    readonly autoShowOutputOnError: boolean;
+    readonly autoHideOutput: boolean;
+    readonly onFileSave: boolean;
+    readonly onFileSaveIndividual: boolean;
+    readonly onFileLoadIndividual: boolean;
+    readonly showProgress: boolean;
+    readonly sites: Site[];
+    readonly cygpath?: string;
+    readonly watchGlobs: string[];
+    readonly useWSL: boolean;
+    readonly siteMap: Map<string, Site>;
+    
+    private readonly _workspaceFolder: string;
+    private readonly _workspaceFolderBasename: string;
 
     constructor(config: WorkspaceConfiguration) {
         this.onFileSave = config.get('onSave', false);
@@ -58,23 +95,26 @@ export class Config {
         this.autoShowOutput = config.get('autoShowOutput', false);
         this.autoShowOutputOnError = config.get('autoShowOutputOnError', true);
         this.autoHideOutput = config.get('autoHideOutput', false);
-        this.cygpath = config.get('cygpath', undefined);
+        this.cygpath = config.get('cygpath');
         this.watchGlobs = config.get('watchGlobs', []);
         this.useWSL = config.get('useWSL', false);
         
-        let site_default = new Site(
-            config.get('name', null),
+        this._workspaceFolder = workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+        this._workspaceFolderBasename = path.basename(this._workspaceFolder);
+
+        const site_default = new Site(
+            config.get<string | null>('name', null),
             false,
             false,
-            config.get('local', null),
-            config.get('remote', null),
+            config.get<string | null>('local', null),
+            config.get<string | null>('remote', null),
             config.get('delete', false),
             config.get('flags', 'rlptzv'),
             config.get('exclude', ['.git', '.vscode']),
             config.get('include', []),
-            config.get('chmod', undefined),
-            config.get('shell', undefined),
-            config.get('executableShell', undefined),
+            config.get('chmod'),
+            config.get('shell'),
+            config.get('executableShell'),
             config.get('executable', 'rsync'),
             undefined,
             undefined,
@@ -82,103 +122,87 @@ export class Config {
             undefined,
             undefined,
             config.get('options', []),
-            config.get('args', []),
-        )
+            config.get('args', [])
+        );
 
-        let sites: Array<Site> = [];
-        let config_sites: Array<Site> = config.get('sites', []);
+        const config_sites = config.get<SiteOptions[]>('sites', []);
+        this.sites = config_sites.length === 0 
+            ? [site_default]
+            : config_sites.map(site => ({ ...site_default, ...site }));
 
-        if(config_sites.length == 0) {
-            sites.push(site_default);
-        } else {
-            for(let site of config_sites) {
-                let clone = Object.assign({},site_default);
-                clone = Object.assign(clone,site);
-                sites.push(clone);
-            }
-        }
+        this.siteMap = new Map(
+            this.sites.map(site => [site.name ?? site.remotePath ?? '', site])
+        );
 
-        let workspaceLocal = workspace.rootPath
+        this.processSites();
+    }
 
-        for(let site of sites) {
-            if(site.localPath === null || site.localPath == "null") {
+    private processSites(): void {
+        const workspaceLocal = this._workspaceFolder;
+
+        for (const site of this.sites) {
+            if (!site.localPath || site.localPath === 'null') {
                 site.localPath = workspaceLocal;
             }
-            if(workspaceLocal != null) {
-                site.localPath = this.expandVars(site.localPath)
-                
-                for(let i = 0; i < site.options.length; i ++) {
-                    const site_option = site.options[i];
-                    for(let j = 0; j < site_option.length; j++ ) {
-                        site_option[j] = this.expandVars(site_option[j]);
-                    }
-                }
 
-                if(site.remotePath != null) {
+            if (workspaceLocal) {
+                site.localPath = this.expandVars(site.localPath);
+                
+                site.options = site.options.map(option => 
+                    option.map(value => this.expandVars(value))
+                );
+
+                if (site.remotePath) {
                     site.remotePath = this.expandVars(site.remotePath);
                 }
-            } 
+            }
 
             site.localPath = this.translatePath(site.localPath);
             site.remotePath = this.translatePath(site.remotePath);
             
-            if(undefined != site.localPath && site.localPath[site.localPath.length - 1] != '/') site.localPath += '/';
-            if(undefined != site.remotePath && site.remotePath[site.remotePath.length - 1] != '/') site.remotePath += '/';
+            if (site.localPath && !site.localPath.endsWith('/')) {
+                site.localPath += '/';
+            }
+            if (site.remotePath && !site.remotePath.endsWith('/')) {
+                site.remotePath += '/';
+            }
         }
-
-        var siteMap = new Map<string, Site>(); 
-
-        for(let s of sites) {
-            var s_key = s.name ? s.name : s.remotePath;
-            siteMap.set(s_key,s);
-        }
-
-        this.siteMap = siteMap;
-
-        this.sites = sites;
     }
 
-    expandVars(path: string) {
-        path = path.replace("${workspaceRoot}",this._workspaceFolder);
-        path = path.replace("${workspaceFolder}",this._workspaceFolder);
-        path = path.replace("${workspaceFolderBasename}",this._workspaceFolderBasename);
-        return path;
+    private expandVars(path: string): string {
+        return path
+            .replace('${workspaceRoot}', this._workspaceFolder)
+            .replace('${workspaceFolder}', this._workspaceFolder)
+            .replace('${workspaceFolderBasename}', this._workspaceFolderBasename);
     }
 
-    translatePath(path: string): string {
-        
-        if(path == null) return null;
-        
-        if(path[0] == '/') return path;
+    private translatePath(path: string | null): string | null {
+        if (!path) return null;
+        if (path.startsWith('/')) return path;
 
-        if(this.cygpath) {
-            let rtn = child.spawnSync(this.cygpath, [path]);
-            if(rtn.status != 0) {
-                throw new Error("Path Tranlate Issue:" + rtn.stderr.toString());
+        if (this.cygpath) {
+            const result = child.spawnSync(this.cygpath, [path]);
+            if (result.status !== 0) {
+                throw new Error(`Path Translate Issue: ${result.stderr.toString()}`);
             }
-            if(rtn.error) {
-                throw rtn.error;
+            if (result.error) {
+                throw result.error;
             }
-            let s_rtn = rtn.stdout.toString();
-            s_rtn = s_rtn.trim();
-            return s_rtn;
+            return result.stdout.toString().trim();
         }
 
-        if(this.useWSL) {
-            let r_path = path.replace(/\\/g,"\\\\");
-            let rtn = child.spawnSync("wsl", ["wslpath", r_path]);
-            if(rtn.status != 0) {
-                throw new Error("Path Tranlate Issue:" + rtn.stderr.toString());
+        if (this.useWSL) {
+            const wslPath = path.replace(/\\/g, '\\\\');
+            const result = child.spawnSync('wsl', ['wslpath', wslPath]);
+            if (result.status !== 0) {
+                throw new Error(`Path Translate Issue: ${result.stderr.toString()}`);
             }
-            if(rtn.error) {
-                throw rtn.error;
+            if (result.error) {
+                throw result.error;
             }
-            let s_rtn = rtn.stdout.toString();
-            s_rtn = s_rtn.trim();
-            return s_rtn;
+            return result.stdout.toString().trim();
         }
 
         return path;
     }
-
 }
