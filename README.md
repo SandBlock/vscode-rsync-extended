@@ -257,4 +257,17 @@ This is an extended version of the original Sync-Rsync extension with the follow
 
 ## License
 
-This extension is licensed under the MIT License. See the LICENSE file for details.
+This extension is licensed under the MIT License - see the [LICENSE](LICENSE.txt) file for details.
+
+Sync-Rsync Extended is a powerful VS Code extension that enhances your development workflow with advanced rsync synchronization capabilities. Built on the original Sync-Rsync, this extended version adds:
+
+• Multi-site support with template inheritance
+• Pre/post sync commands for automated workflows
+• Automatic sync on save/load
+• Progress tracking and notifications
+• Windows, macOS, and Linux support
+• WSL and Cygwin integration
+• Advanced file filtering with include/exclude patterns
+• Customizable rsync flags and options
+
+Perfect for developers working with remote servers, this extension provides seamless file synchronization with your development environment.
